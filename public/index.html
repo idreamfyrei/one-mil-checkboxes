@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>One Million Checkbox</title>
+    <style>
+      :root {
+        --bg: #070b0f;
+        --panel: #18a66e;
+        --ink: #05160f;
+        --accent: #d4e734;
+        --line: #1f2a2f;
+        --text: #d8ffec;
+        --muted: #78b89a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        height: 100%;
+        max-height: 100vh;
+        max-height: 100dvh;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+
+      body {
+        margin: 0;
+        height: 100%;
+        max-height: 100vh;
+        max-height: 100dvh;
+        overflow: hidden;
+        overscroll-behavior: none;
+        font-family: "Inter", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        color: var(--text);
+        background:
+          radial-gradient(circle at center, rgba(255, 255, 255, 0.05), transparent 55%),
+          repeating-linear-gradient(0deg, rgba(30, 46, 56, 0.4) 0, rgba(30, 46, 56, 0.4) 1px, transparent 1px, transparent 10px),
+          repeating-linear-gradient(90deg, rgba(30, 46, 56, 0.4) 0, rgba(30, 46, 56, 0.4) 1px, transparent 1px, transparent 10px),
+          var(--bg);
+      }
+
+      .app {
+        height: 100%;
+        max-height: 100vh;
+        max-height: 100dvh;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        /* minmax(0, 1fr) lets the board shrink; plain 1fr min-size:auto can overflow the viewport */
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 14px;
+        overflow: hidden;
+        min-height: 0;
+      }
+
+      .top {
+        grid-column: 1;
+        grid-row: 1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+      }
+
+      .stat-card {
+        width: min(380px, 100%);
+        background: var(--accent);
+        color: var(--ink);
+        border: 1px solid #687306;
+        padding: 12px;
+      }
+
+      .stat-label {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 1px;
+      }
+
+      .stat-value {
+        margin-top: 8px;
+        font-size: 66px;
+        line-height: 0.92;
+        font-weight: 900;
+        letter-spacing: 2px;
+      }
+
+      .meta-row {
+        margin-top: 10px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        opacity: 0.85;
+      }
+
+      .login-btn {
+        border: 1px solid #2a6f57;
+        background: #0f2f25;
+        color: #bcf9dd;
+        font-size: 13px;
+        font-weight: 700;
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+
+      .login-btn:hover {
+        filter: brightness(1.1);
+      }
+
+      .board {
+        grid-column: 1;
+        grid-row: 2;
+        position: relative;
+        border: 1px solid var(--line);
+        background-color: rgba(11, 15, 20, 0.6);
+        padding: 8px;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .rate-toast {
+        position: absolute;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 3;
+        padding: 8px 14px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        color: #1a0a05;
+        background: rgba(255, 107, 53, 0.96);
+        border: 1px solid #ffc09f;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+        pointer-events: none;
+        max-width: min(92%, 360px);
+        text-align: center;
+      }
+
+      .rate-toast[hidden] {
+        display: none !important;
+      }
+
+      .viewport {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        overflow-x: hidden;
+        overflow-y: auto;
+        touch-action: pan-y;
+        overscroll-behavior: contain;
+        background: rgba(4, 8, 10, 0.5);
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .spacer {
+        pointer-events: none;
+      }
+
+      .viewport canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        cursor: crosshair;
+      }
+
+      .activity {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        border: 1px solid #0a6e4c;
+        background: var(--panel);
+        color: #093321;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .activity-head {
+        border-bottom: 1px solid rgba(9, 51, 33, 0.3);
+        padding: 12px;
+      }
+
+      .activity-head h2 {
+        margin: 4px 0 0;
+        font-size: 36px;
+        line-height: 0.9;
+      }
+
+      .activity-sub {
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .logs {
+        flex: 1;
+        overflow: auto;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .log {
+        border-bottom: 1px dashed rgba(9, 51, 33, 0.3);
+        padding-bottom: 6px;
+        font-size: 12px;
+      }
+
+      .log-user {
+        font-weight: 700;
+      }
+
+      .log-time {
+        opacity: 0.8;
+      }
+
+      @media (max-width: 900px) {
+        .app {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto auto minmax(0, 1fr);
+        }
+
+        .top {
+          grid-column: 1;
+        }
+
+        .activity {
+          grid-column: 1;
+          grid-row: 2;
+          max-height: 280px;
+        }
+
+        .board {
+          grid-column: 1;
+          grid-row: 3;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="top">
+        <div class="stat-card">
+          <div class="stat-label">TOTAL_CHECKED</div>
+          <div id="totalChecked" class="stat-value">0000000</div>
+          <div class="meta-row">
+            <span>STATUS: ACTIVE</span>
+            <span id="uptime">SYNC: READY</span>
+          </div>
+        </div>
+        <button id="loginButton" class="login-btn">LOGIN</button>
+      </section>
+
+      <section class="board">
+        <div id="viewport" class="viewport">
+          <div id="spacer" class="spacer" aria-hidden="true"></div>
+          <canvas id="canvas" aria-label="Checkbox grid"></canvas>
+        </div>
+        <div id="rateToast" class="rate-toast" hidden aria-live="polite"></div>
+      </section>
+
+      <aside class="activity">
+        <div class="activity-head">
+          <div class="activity-sub">LIVE FEED</div>
+          <h2>ACTIVITY</h2>
+        </div>
+        <div id="logs" class="logs"></div>
+      </aside>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = typeof io === "function" ? io() : null;
+      const viewportEl = document.getElementById("viewport");
+      const spacerEl = document.getElementById("spacer");
+      const canvasEl = document.getElementById("canvas");
+      const logsEl = document.getElementById("logs");
+      const totalCheckedEl = document.getElementById("totalChecked");
+      const loginButton = document.getElementById("loginButton");
+      const uptime = document.getElementById("uptime");
+      const rateToastEl = document.getElementById("rateToast");
+
+      const CELL = 14;
+      let checkboxCount = 1_000_000;
+      /** Columns derived from viewport width so the grid fits without horizontal scroll. */
+      let gridCols = 1;
+      let gridRows = 1;
+      let rateLimitMs = 5000;
+      /** @type {Uint8Array | null} */
+      let bitCache = null;
+      let localUser = "you";
+      let drawScheduled = false;
+      /** @type {{ index: number; until: number } | null} */
+      let rateFlash = null;
+      let rateToastTimer = 0;
+      let lastRequestAt = 0;
+
+      const ctx = canvasEl.getContext("2d", { alpha: false });
+
+      function formatTotal(value) {
+        return String(value).padStart(7, "0");
+      }
+
+      function getBit(u8, i) {
+        return ((u8[i >> 3] >> (7 - (i & 7))) & 1) !== 0;
+      }
+
+      function setBit(u8, i, v) {
+        const o = i >> 3;
+        const m = 1 << (7 - (i & 7));
+        if (v) u8[o] |= m;
+        else u8[o] &= ~m;
+      }
+
+      function scheduleDraw() {
+        if (drawScheduled) return;
+        drawScheduled = true;
+        requestAnimationFrame(() => {
+          drawScheduled = false;
+          draw();
+          if (rateFlash && Date.now() < rateFlash.until) {
+            requestAnimationFrame(() => scheduleDraw());
+          }
+        });
+      }
+
+      function showRateToast(text) {
+        rateToastEl.textContent = text;
+        rateToastEl.hidden = false;
+        window.clearTimeout(rateToastTimer);
+        rateToastTimer = window.setTimeout(function () {
+          rateToastEl.hidden = true;
+        }, 2200);
+      }
+
+      function flashRateLimited(index) {
+        rateFlash = { index: index, until: Date.now() + 1800 };
+        scheduleDraw();
+      }
+
+      function computeGridLayout() {
+        const vw = viewportEl.clientWidth || 1;
+        gridCols = Math.max(1, Math.floor(vw / CELL));
+        gridRows = Math.max(1, Math.ceil(checkboxCount / gridCols));
+      }
+
+      /** After grid width/cols change, scrollTop can sit past the new content — draw loop then skips all rows (blank). */
+      function clampViewportScroll() {
+        const el = viewportEl;
+        const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+        if (el.scrollTop > maxTop) {
+          el.scrollTop = maxTop;
+        }
+        el.scrollLeft = 0;
+      }
+
+      function draw() {
+        if (!ctx || !bitCache) return;
+        if (rateFlash && Date.now() >= rateFlash.until) {
+          rateFlash = null;
+        }
+        clampViewportScroll();
+        const vw = Math.max(1, viewportEl.clientWidth || 1);
+        const vh = Math.max(1, viewportEl.clientHeight || 1);
+        const rawDpr = window.devicePixelRatio || 1;
+        /** Browsers often cap canvas backing store (~8192px/side); exceeding yields clipped or blank draws. */
+        const MAX_DIM = 8192;
+        const dpr = Math.min(rawDpr, MAX_DIM / vw, MAX_DIM / vh);
+        const bw = Math.max(1, Math.floor(vw * dpr));
+        const bh = Math.max(1, Math.floor(vh * dpr));
+        canvasEl.width = bw;
+        canvasEl.height = bh;
+        ctx.setTransform(bw / vw, 0, 0, bh / vh, 0, 0);
+
+        const sl = 0;
+        const st = viewportEl.scrollTop;
+        canvasEl.style.transform = "translateY(" + st + "px)";
+        const startCol = 0;
+        const docBottom = st + vh;
+        const startRow = Math.max(0, Math.floor(st / CELL));
+        const endCol = Math.min(gridCols - 1, Math.floor((vw - 1) / CELL));
+        const lastRowIntersecting = Math.min(
+          gridRows - 1,
+          Math.max(startRow, Math.floor((docBottom - 1) / CELL))
+        );
+        const endRow = lastRowIntersecting;
+
+        ctx.fillStyle = "#0b0f14";
+        ctx.fillRect(0, 0, vw, vh);
+
+        if (startRow > endRow || startCol > endCol) {
+          return;
+        }
+
+        for (let row = startRow; row <= endRow; row += 1) {
+          for (let col = startCol; col <= endCol; col += 1) {
+            const idx = row * gridCols + col;
+            const x = col * CELL - sl;
+            const y = row * CELL - st;
+            ctx.strokeStyle = "#6a8a92";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
+            if (idx >= checkboxCount) continue;
+            const on = getBit(bitCache, idx);
+            if (on) {
+              ctx.fillStyle = "#deff50";
+              ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+            }
+            if (
+              rateFlash &&
+              idx === rateFlash.index &&
+              Date.now() < rateFlash.until
+            ) {
+              const t = (rateFlash.until - Date.now()) / 1800;
+              const pulse = 0.35 + 0.65 * (1 - Math.max(0, Math.min(1, t)));
+              ctx.save();
+              ctx.strokeStyle = "rgba(255, 107, 53, " + (0.4 + pulse * 0.6) + ")";
+              ctx.lineWidth = 3;
+              ctx.strokeRect(x - 1, y - 1, CELL + 1, CELL + 1);
+              ctx.restore();
+            }
+          }
+        }
+      }
+
+      function layoutSpacer() {
+        computeGridLayout();
+        spacerEl.style.width = gridCols * CELL + "px";
+        spacerEl.style.height = gridRows * CELL + "px";
+        requestAnimationFrame(function () {
+          clampViewportScroll();
+          scheduleDraw();
+        });
+      }
+
+      function addLog({ user, checked, index, timestamp }) {
+        const item = document.createElement("div");
+        item.className = "log";
+        const action = checked ? "CHECKED" : "UNCHECKED";
+        const time = new Date(timestamp || Date.now()).toLocaleTimeString();
+        item.innerHTML =
+          '<span class="log-user">' +
+          String(user) +
+          "</span> " +
+          action +
+          " #" +
+          (index + 1) +
+          "<br /><span class=\"log-time\">" +
+          time +
+          "</span>";
+        logsEl.prepend(item);
+        const limit = 200;
+        while (logsEl.childElementCount > limit) {
+          logsEl.removeChild(logsEl.lastElementChild);
+        }
+      }
+
+      function indexFromPointer(clientX, clientY) {
+        const r = viewportEl.getBoundingClientRect();
+        const x = clientX - r.left + viewportEl.scrollLeft;
+        const y = clientY - r.top + viewportEl.scrollTop;
+        const col = Math.floor(x / CELL);
+        const row = Math.floor(y / CELL);
+        if (col < 0 || col >= gridCols || row < 0 || row >= gridRows) return -1;
+        const idx = row * gridCols + col;
+        if (idx >= checkboxCount) return -1;
+        return idx;
+      }
+
+      viewportEl.addEventListener(
+        "scroll",
+        function () {
+          viewportEl.scrollLeft = 0;
+          scheduleDraw();
+        },
+        { passive: true }
+      );
+      window.addEventListener("resize", function () {
+        layoutSpacer();
+      });
+
+      canvasEl.addEventListener("click", (e) => {
+        if (!socket || !bitCache) return;
+        const idx = indexFromPointer(e.clientX, e.clientY);
+        if (idx < 0 || idx >= checkboxCount) return;
+        const now = Date.now();
+        if (lastRequestAt && now - lastRequestAt < rateLimitMs) {
+          const waitSec = ((rateLimitMs - (now - lastRequestAt)) / 1000).toFixed(1);
+          flashRateLimited(idx);
+          showRateToast("WAIT — next click in " + waitSec + "s");
+          return;
+        }
+        const next = !getBit(bitCache, idx);
+        lastRequestAt = now;
+        socket.emit("checkbox:update", {
+          index: idx,
+          checked: next,
+          user: localUser,
+        });
+      });
+
+      if (!socket) {
+        uptime.textContent = "SYNC: OFFLINE";
+      } else {
+        socket.on("connect", () => {
+          const id = socket.id ? socket.id.slice(0, 6) : "------";
+          uptime.textContent = "SYNC: CONNECTED " + id;
+          socket.emit("checkbox:init:request");
+        });
+
+        socket.on("disconnect", () => {
+          uptime.textContent = "SYNC: RECONNECTING";
+        });
+
+        socket.on("checkbox:init", (payload) => {
+          checkboxCount = payload.checkboxCount || checkboxCount;
+          rateLimitMs = payload.rateLimitMs || rateLimitMs;
+          totalCheckedEl.textContent = formatTotal(payload.totalChecked || 0);
+          bitCache = new Uint8Array(Math.ceil(checkboxCount / 8));
+          layoutSpacer();
+          socket.emit("checkbox:bitmap:request");
+          scheduleDraw();
+        });
+
+        socket.on("checkbox:rate_limited", (payload) => {
+          const ms =
+            payload && payload.retryAfterMs != null ? payload.retryAfterMs : rateLimitMs;
+          lastRequestAt = Date.now() + ms - rateLimitMs;
+          if (payload && typeof payload.index === "number") {
+            flashRateLimited(payload.index);
+          }
+          const sec = (ms / 1000).toFixed(1);
+          showRateToast("RATE LIMIT — try again in " + sec + "s");
+        });
+
+        socket.on("checkbox:bitmap", (payload) => {
+          if (!payload || payload.encoding !== "base64" || !payload.data || !bitCache) return;
+          const bin = atob(payload.data);
+          const len = Math.min(bitCache.length, bin.length);
+          for (let i = 0; i < len; i += 1) {
+            bitCache[i] = bin.charCodeAt(i);
+          }
+          scheduleDraw();
+        });
+
+        socket.on("checkbox:updated", (event) => {
+          if (!bitCache || typeof event.index !== "number") return;
+          setBit(bitCache, event.index, event.checked);
+          totalCheckedEl.textContent = formatTotal(event.totalChecked);
+          addLog(event);
+          scheduleDraw();
+        });
+      }
+
+      loginButton.addEventListener("click", () => {
+        const nextUser = window.prompt("Enter display name", localUser);
+        if (!nextUser) return;
+        localUser = nextUser.trim().slice(0, 32) || "you";
+        loginButton.textContent = "USER: " + localUser.toUpperCase();
+      });
+    </script>
+  </body>
+</html>
