@@ -18,8 +18,8 @@ const PUB_CHANNEL      = process.env.VALKEY_PUB_CHANNEL   || 'checkbox:events';
 const RATE_KEY_PREFIX  = process.env.VALKEY_RATE_PREFIX   || 'checkbox:rate:';
 const RATE_KEY_TTL_SEC = Number(process.env.VALKEY_RATE_TTL_SEC || 86400);
 
-const IDP_URL      = process.env.IDP_URL    || 'http://localhost:3000';
-const APP_URL      = process.env.APP_URL    || `http://localhost:${PORT}`;
+const IDP_URL      = (process.env.IDP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+const APP_URL      = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
 const CLIENT_ID    = process.env.CLIENT_ID  || 'one-mil-checkbox';
 const REDIRECT_URI = `${APP_URL}/auth/callback`;
 
@@ -111,6 +111,21 @@ async function main() {
     `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
 
 
+  const authorizeUrl = ({ state, nonce, challenge }) => {
+    const params = new URLSearchParams({
+      client_id:             CLIENT_ID,
+      redirect_uri:          REDIRECT_URI,
+      response_type:         'code',
+      scope:                 'openid profile email',
+      state,
+      nonce,
+      code_challenge:        challenge,
+      code_challenge_method: 'S256',
+    });
+
+    return `${IDP_URL}/authorize?${params}`;
+  };
+
   app.get('/auth/login', (_req, res) => {
     const { verifier, challenge } = generatePkce();
     const state = randomId(24);
@@ -123,18 +138,18 @@ async function main() {
       PKCE_TTL_SEC,
     );
 
-    const params = new URLSearchParams({
-      client_id:             CLIENT_ID,
-      redirect_uri:          REDIRECT_URI,
-      response_type:         'code',
-      scope:                 'openid profile email',
-      state,
-      nonce,
-      code_challenge:        challenge,
-      code_challenge_method: 'S256',
-    });
+    const url = authorizeUrl({ state, nonce, challenge });
+    console.log(`[auth] authorize client_id=${CLIENT_ID} redirect_uri=${REDIRECT_URI}`);
+    res.redirect(302, url);
+  });
 
-    res.redirect(302, `${IDP_URL}/authorize?${params}`);
+  app.get('/auth/config', (_req, res) => {
+    res.json({
+      idpUrl: IDP_URL,
+      appUrl: APP_URL,
+      clientId: CLIENT_ID,
+      redirectUri: REDIRECT_URI,
+    });
   });
 
   app.get('/auth/callback', async (req, res) => {
