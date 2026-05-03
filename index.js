@@ -20,7 +20,7 @@ const RATE_KEY_TTL_SEC = Number(process.env.VALKEY_RATE_TTL_SEC || 86400);
 
 const IDP_URL      = process.env.IDP_URL    || 'http://localhost:3000';
 const APP_URL      = process.env.APP_URL    || `http://localhost:${PORT}`;
-const CLIENT_ID    = process.env.CLIENT_ID  || 'checkbox-app';
+const CLIENT_ID    = process.env.CLIENT_ID  || 'one-mil-checkbox';
 const REDIRECT_URI = `${APP_URL}/auth/callback`;
 
 const SESSION_COOKIE  = 'cb_session';
