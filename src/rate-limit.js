@@ -4,14 +4,7 @@ import {
   HTTP_RL_PREFIX, HTTP_RL_MAX, HTTP_RL_WINDOW,
 } from './config.js';
 
-/**
- * Sliding-window rate limit for socket events.
- *
- * Stores the timestamp of the last allowed action. Atomically checks whether
- * the required window has elapsed and, if so, records the new timestamp.
- * Using Lua guarantees the read-check-write is atomic — no race between two
- * concurrent socket events from the same user.
- */
+
 const SLIDING_WINDOW_LUA = `
 local key    = KEYS[1]
 local window = tonumber(ARGV[1])
@@ -37,13 +30,6 @@ export async function checkSocketRateLimit(userId) {
   return { allowed, retryAfterMs };
 }
 
-/**
- * Counter-based rate limit for HTTP endpoints, keyed by IP.
- *
- * Uses INCR + EXPIRE (set only on the first hit) to count requests within a
- * fixed window. Intentionally simpler than the Lua sliding window — fixed
- * windows are fine for protecting auth endpoints against burst abuse.
- */
 export async function checkHttpRateLimit(ip) {
   const key   = `${HTTP_RL_PREFIX}${ip}`;
   const count = await redis.incr(key);
@@ -68,7 +54,7 @@ export function httpRateLimit() {
       next();
     } catch (err) {
       console.error('[rate-limit:http]', err.message);
-      next(); // fail open — never block a request due to a Redis error
+      next(); 
     }
   };
 }

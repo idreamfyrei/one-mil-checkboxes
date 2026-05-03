@@ -8,7 +8,6 @@ import {
   SESSION_TTL_SEC, PKCE_TTL_SEC,
 } from './config.js';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 export const parseCookies = (header = '') =>
   header.split(';').reduce((acc, part) => {
@@ -25,7 +24,6 @@ const generatePkce = () => {
 
 const randomId = (bytes = 24) => crypto.randomBytes(bytes).toString('base64url');
 
-// ── Session helpers ───────────────────────────────────────────────────────────
 
 export const getSession = async (req) => {
   const sid = parseCookies(req.headers.cookie || '')[SESSION_COOKIE];
@@ -51,11 +49,10 @@ export const sessionCookieHeader = (sid) =>
 export const clearCookieHeader = () =>
   `${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`;
 
-// ── Auth router ───────────────────────────────────────────────────────────────
+
 
 export const authRouter = Router();
 
-// Rate-limited: prevents PKCE state flooding
 authRouter.get('/auth/login', httpRateLimit(), (_req, res) => {
   const { verifier, challenge } = generatePkce();
   const state = randomId(24);

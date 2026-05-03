@@ -10,20 +10,14 @@ import {
 const bitmapByteLength = (bits) => Math.ceil(bits / 8);
 
 export async function setupSocket(io) {
-  // ── Pub/Sub fan-out ─────────────────────────────────────────────────────────
-  // sub is a dedicated Redis connection that stays in subscribe mode.
-  // When any server instance publishes a toggle, every instance broadcasts
-  // checkbox:updated to its own connected clients — no direct socket-to-socket
-  // coupling needed.
+
   await sub.subscribe(PUB_CHANNEL);
   sub.on('message', (_ch, msg) => {
     try { io.emit('checkbox:updated', JSON.parse(msg)); }
     catch (e) { console.error('[socket] pub/sub parse error', e); }
   });
 
-  // ── Auth middleware ──────────────────────────────────────────────────────────
-  // Reads the session cookie from the Socket.IO handshake headers so every
-  // socket knows its user before any event fires.
+  
   io.use(async (socket, next) => {
     try {
       const sid = parseCookies(socket.handshake.headers.cookie || '')[SESSION_COOKIE];
@@ -35,12 +29,11 @@ export async function setupSocket(io) {
     next();
   });
 
-  // ── Connection handler ───────────────────────────────────────────────────────
   io.on('connection', (socket) => {
     const who = socket.user?.email ?? 'anon';
     console.log(`[socket] connect    id=${socket.id.slice(0, 6)}  user=${who}`);
 
-    // Send lightweight init payload immediately on connect
+
     const emitInit = async () => {
       const totalChecked = await redis.bitcount(BITMAP_KEY);
       socket.emit('checkbox:init', {
@@ -54,7 +47,6 @@ export async function setupSocket(io) {
     emitInit().catch(console.error);
     socket.on('checkbox:init:request', () => emitInit().catch(console.error));
 
-    // Client requests full bitmap snapshot to render the grid on load / refresh
     socket.on('checkbox:bitmap:request', async () => {
       try {
         const raw = await redis.getBuffer(BITMAP_KEY);
@@ -72,7 +64,6 @@ export async function setupSocket(io) {
       }
     });
 
-    // Authenticated toggle request
     socket.on('checkbox:update', async (payload = {}) => {
       if (!socket.user) {
         socket.emit('checkbox:error', { message: 'login_required', code: 'UNAUTHORIZED' });
