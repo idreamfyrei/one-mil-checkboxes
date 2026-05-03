@@ -2,6 +2,8 @@
 
 - [One mil checkboxes](https://mil-checkboxes.saumyagrawal.in/)
 - [IdP](https://auth.saumyagrawal.in/)
+
+
 Real-time collaborative checkbox board with one million virtualized cells, backed by Redis/Valkey for shared state and pub/sub fan-out.
 
 ## Project overview
