@@ -1,225 +1,152 @@
 # One Million Checkbox
 
-Real-time collaborative checkbox grid backed by **Valkey** (bitmap state + pub/sub + distributed rate limits). The browser renders a **virtualized canvas** grid: the number of columns is computed from the viewport width (`floor(width / cellSize)`), so the sheet fits without horizontal scrolling and you scroll **vertically** through rows only.
+Real-time collaborative checkbox board with one million virtualized cells, backed by Valkey for shared state and pub/sub fanout.
 
----
+## What this project does
+
+- Renders a 1,000,000-cell grid on a single canvas.
+- Syncs checkbox updates in real time across connected clients using Socket.IO.
+- Persists state in Valkey as a bitmap (`SETBIT`, `BITCOUNT`).
+- Uses OAuth/OIDC login flow (Authorization Code + PKCE) with session cookies.
+- Restricts toggle actions to authenticated users and rate-limits by user ID.
 
 ## Tech stack
 
-| Layer | Technology |
-|--------|------------|
-| Runtime | Node.js (ES modules) |
-| HTTP / static UI | Express 5 |
-| Real-time transport | Socket.IO (WebSockets + fallback) |
-| Shared state & messaging | Valkey / Redis protocol (`ioredis`): bitmap (`SETBIT`/`BITCOUNT`), pub/sub for broadcasts, Lua rate limiting |
-| Container (local Valkey) | Docker Compose (`valkey/valkey`) |
-| Configuration | `dotenv`, `.env` |
+- Backend: `Node.js` (ESM), `Express 5`, `Socket.IO`
+- Data layer: `Valkey` via `ioredis`
+- Auth: OAuth/OIDC style redirect flow with PKCE + session in Valkey
+- Frontend: Plain `HTML + Canvas + vanilla JS` served from `public/`
+- Config: `.env` + `dotenv`
+- Local infrastructure: `docker compose` for Valkey
 
-Optional additions when you add authentication or scale further:
+## Current folder structure
 
-| Concern | Typical choice |
-|---------|----------------|
-| OIDC / OAuth2 sign-in | `passport` + `passport-openidconnect` (or provider SDK), or Auth.js / custom OAuth flow |
-| HTTP session after OIDC | `express-session` + Redis/Valkey session store so sessions work across instances |
-| Socket.IO across multiple servers | `@socket.io/redis-adapter` (or sticky sessions + same pub/sub pattern you already use for events) |
-
----
-
-## Do you need a folder structure beyond `index.js`?
-
-**No, not strictly.** A single `index.js` plus `public/` is fine for this size of project.
-
-Splitting into folders becomes worthwhile when you grow beyond one server file (for example):
-
-- `src/server.js` — HTTP server, Socket.IO, middleware wiring  
-- `src/valkey.js` — Redis clients, bitmap helpers, Lua scripts  
-- `src/socket/handlers.js` — connection / checkbox / bitmap handlers  
-- `middleware/auth.js` — OIDC callbacks, session checks  
-
-Until then, keeping `index.js` at the repo root is normal and keeps deployment simple (`node index.js`).
-
----
-
-## Project structure (current)
-
-```
+```text
 one-mil-checkbox/
-├── index.js              # Express app, Socket.IO, Valkey (bitmap, pub/sub, rate limit Lua)
+├── index.js
+├── public/
+│   └── index.html
+├── docker-compose.yml
 ├── package.json
 ├── pnpm-lock.yaml
-├── docker-compose.yml    # Local Valkey for development
-├── .env                  # Local secrets (not committed)
-├── .env.example          # Documented variables
-├── public/
-│   └── index.html        # Canvas UI, Socket.IO client, activity log
+├── .env.example
 └── README.md
 ```
 
-**Suggested structure later** (when adding OIDC tests or routes):
+### Folder notes
 
-```
-src/
-  server.js
-  routes/
-    auth.js               # /login, /oauth/callback, /logout
-middleware/
-  requireAuth.js          # optional for HTML vs API
-public/
-  index.html
-```
+- `index.js`: Main app entry point (Express routes, Socket.IO handlers, auth/session logic, Valkey pub/sub, rate limiting Lua).
+- `public/index.html`: Entire UI (rendering, auth UI state, websocket events, activity feed).
+- `docker-compose.yml`: Local Valkey container.
+- `.env.example`: Required environment variables and defaults.
 
----
+## Realtime architecture
 
-## How hosting fits together
+ss1
 
-```mermaid
-flowchart LR
-  subgraph clients [Browsers]
-    U[Users]
-  end
-  subgraph edge [Edge]
-    LB[Load balancer / TLS]
-  end
-  subgraph app [Node replicas]
-    A1[App instance 1]
-    A2[App instance 2]
-  end
-  subgraph data [Valkey]
-    V[(Bitmap + pub/sub + rate keys)]
-  end
-  U --> LB
-  LB --> A1
-  LB --> A2
-  A1 --> V
-  A2 --> V
-```
+How update propagation works:
 
-- **Static assets + Socket.IO** are served by each Node process (or put a CDN in front for static files only; WebSockets still hit Node).
-- **Valkey** holds the checkbox bitmap and propagates updates via **pub/sub** so every instance broadcasts the same events.
-- **Rate limits** use Valkey + Lua so limits stay consistent across replicas.
+1. User clicks a checkbox in the canvas.
+2. Client emits `checkbox:update` via Socket.IO.
+3. Server validates auth, validates index, runs rate-limit Lua in Valkey.
+4. Server writes bit with `SETBIT`.
+5. Server publishes update event to Valkey pub/sub channel.
+6. Subscriber receives it and emits `checkbox:updated` to connected clients.
+7. Clients patch local bitmap + redraw only visible region.
 
----
+## Auth and IdP flow
 
-## OIDC login: how it would work with this app
+The app implements an OAuth/OIDC-style flow against your IdP:
 
-OIDC runs over **normal HTTPS requests** (redirect to IdP, callback with code, exchange for tokens). Socket.IO is separate but can reuse the same identity.
+- `/auth/login` creates PKCE verifier/challenge and redirects to IdP `/authorize`.
+- IdP redirects back to `/auth/callback` with auth code.
+- Server exchanges code at IdP `/oauth/token`.
+- Server fetches profile from IdP `/oauth/userinfo`.
+- Server creates session in Valkey and sets `cb_session` HttpOnly cookie.
+- Socket handshake reads this cookie and attaches `socket.user`.
 
-### Recommended pattern
+ss2
 
-1. **OIDC on Express**  
-   Add routes such as `/auth/login`, `/auth/callback`, `/auth/logout` using your IdP (Azure AD, Okta, Keycloak, Google, etc.). After a successful callback, store the user profile (at minimum `sub`, and optionally `name`, `email`) in a **server-side session** (`express-session`) or issue a **signed HTTP-only cookie / JWT** that your API trusts.
+## Route map (what each route does)
 
-2. **Protect the UI**  
-   Either serve `public/index.html` only when authenticated (middleware checks session before `sendFile`), or serve a small login shell and load the app after login.
+### HTTP routes
 
-3. **Socket.IO authentication**  
-   The browser does not automatically send cookies to Socket.IO in all setups; the usual approach is:
-   - **Auth handshake**: `io({ auth: { token } })` where `token` is a short-lived JWT or session token obtained from `/auth/session` after OIDC, **or**
-   - Enable cookie-based auth and configure Socket.IO + CORS/credentials so the session cookie is sent on the handshake.
+- `GET /auth/login`: Starts login flow, stores PKCE verifier, redirects to IdP authorize URL.
+- `GET /auth/config`: Returns runtime auth config (`idpUrl`, `appUrl`, `clientId`, `redirectUri`).
+- `GET /auth/callback`: Exchanges code for token, loads userinfo, creates session cookie, redirects home.
+- `GET /auth/logout`: Deletes session and clears cookie.
+- `GET /auth/me`: Returns current user from session, else `401`.
+- `GET /health`: Basic health endpoint.
+- `GET /` and static assets: Served by `express.static(public)`.
 
-   On the server, use `io.use((socket, next) => { ... validate token/session ...; socket.user = profile; next(); })`. Reject unauthenticated connections if you want the grid private.
+### Socket events
 
-4. **Use stable identity in events**  
-   Today the UI sends a free-text `user` string. With OIDC, set `user` from claims (for example `sub` or email) on the server when handling `checkbox:update`, so activity logs show real identities and rate limits can key off `sub` instead of only `socket.id` if you choose.
+- `checkbox:init:request`: Client asks for fresh init payload.
+- `checkbox:init` (server -> client): Sends `checkboxCount`, `totalChecked`, `rateLimitMs`, `user`.
+- `checkbox:bitmap:request`: Client requests full bitmap snapshot.
+- `checkbox:bitmap` (server -> client): Base64 bitmap payload.
+- `checkbox:update`: Authenticated toggle request.
+- `checkbox:updated` (server -> clients): Broadcasted state change event.
+- `checkbox:rate_limited` (server -> client): Sent when user exceeds update window.
+- `checkbox:error` (server -> client): Error states such as unauthenticated writes.
 
-### OIDC + session sequence (conceptual)
-
-```mermaid
-sequenceDiagram
-  participant B as Browser
-  participant A as Node / Express
-  participant I as Identity provider
-  participant V as Valkey
-  B->>A: GET /auth/login
-  A->>I: Redirect (authorize)
-  I->>B: User signs in
-  I->>A: Callback with code
-  A->>I: Exchange code for tokens
-  A->>A: Create session (user sub, name)
-  A->>B: Set-Cookie session
-  B->>A: GET / (with cookie)
-  A->>B: index.html
-  B->>A: Socket.IO connect (cookie or token)
-  A->>A: Attach user to socket
-  B->>A: checkbox:update
-  A->>V: SETBIT / publish
-```
-
-### Rate limiting and logged-in users
-
-Right now rate keys are **`checkbox:rate:{socketId}`**. After OIDC you may switch to **`checkbox:rate:{sub}`** (subject claim) so one human has one limit across reconnects and tabs, if that matches your product rules.
-
----
-
-## Data flow (checkbox update)
-
-```mermaid
-sequenceDiagram
-  participant C as Client
-  participant N as Node instance
-  participant V as Valkey
-  participant O as Other instances
-  C->>N: checkbox:update
-  N->>V: Lua rate check + SETBIT
-  N->>V: PUBLISH event
-  V-->>N: Pub/sub message
-  N->>C: checkbox:updated (all local clients)
-  V-->>O: Pub/sub message
-  O->>C: checkbox:updated
-```
-
----
-
-## Project setup
+## Local setup
 
 ### Prerequisites
 
-- Node.js 18+ recommended  
-- [pnpm](https://pnpm.io/) (see `packageManager` in `package.json`)  
+- Node.js 18+
+- `pnpm` (project uses `pnpm@10.11.0`)
 - Docker (optional, for local Valkey)
 
-### Install
+### 1) Install dependencies
 
 ```bash
 pnpm install
 ```
 
-### Environment
+### 2) Configure environment
 
-Copy `.env.example` to `.env` and adjust:
+```bash
+cp .env.example .env
+```
 
-| Variable | Purpose |
-|----------|---------|
-| `PORT` | HTTP port |
-| `VALKEY_URL` | Valkey/Redis URL (`redis://host:6379`) |
-| `CHECKBOX_COUNT` | Logical checkbox count (default 1_000_000) |
-| `CHECKBOX_RATE_MS` | Minimum milliseconds between attempts per socket (default 5000) |
-| `VALKEY_RATE_PREFIX` / `VALKEY_RATE_TTL_SEC` | Rate-limit key prefix and TTL |
+Minimum env keys:
 
-### Run Valkey locally
+- `PORT`: App port (default `8000`)
+- `APP_URL`: App base URL (must match callback host)
+- `VALKEY_URL`: Valkey connection URL
+- `VALKEY_BITMAP_KEY`: Bitmap key name
+- `VALKEY_PUB_CHANNEL`: Pub/sub channel name
+- `VALKEY_RATE_PREFIX`: Prefix for rate keys
+- `VALKEY_RATE_TTL_SEC`: Rate key TTL
+- `CHECKBOX_COUNT`: Total logical checkboxes
+- `CHECKBOX_RATE_MS`: Minimum interval between updates per user
+- `IDP_URL`: Identity provider base URL
+- `CLIENT_ID`: Registered client ID in your IdP
+
+### 3) Start Valkey
 
 ```bash
 pnpm valkey:up
 ```
 
-### Run the app
+### 4) Start the app
 
 ```bash
 pnpm start
 ```
 
-Open `http://localhost:${PORT}` (default from `.env`).
+Open `http://localhost:8000`.
 
----
+## End-to-end flow summary
 
-## Production notes
-
-- Terminate TLS at your load balancer or reverse proxy (nginx, Caddy, cloud LB) and forward HTTP to Node.
-- Point `VALKEY_URL` at a managed Valkey/Redis service with persistence if you care about surviving restarts.
-- For OIDC, use HTTPS everywhere and lock down callback URLs in your IdP.
-- If you run **many** Socket.IO nodes, consider `@socket.io/redis-adapter` in addition to your existing Valkey pub/sub for checkbox events, or use sticky sessions for WebSockets depending on your provider.
-
----
+1. Browser loads UI from `public/index.html`.
+2. UI calls `/auth/me` to determine login state.
+3. UI opens Socket.IO connection.
+4. Server emits init payload (`checkbox:init`), then bitmap (`checkbox:bitmap`) on request.
+5. User click emits `checkbox:update`.
+6. Server enforces auth + distributed rate limit, writes bit, publishes event.
+7. All clients receive `checkbox:updated`, mutate local cache, and redraw.
 
 ## License
 
